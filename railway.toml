@@ -1,0 +1,45 @@
+# ============================================================
+# Railway — railway.toml
+# https://docs.railway.app/reference/config-as-code
+# ============================================================
+
+[build]
+builder = "DOCKERFILE"
+buildCommand = ""
+
+# ── Backend Service ──────────────────────────────────────────
+[[services]]
+name = "backend"
+source = "backend"
+
+[services.build]
+dockerfilePath = "backend/Dockerfile"
+dockerContext = "backend"
+
+[services.deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+
+[[services.variables]]
+# All sensitive variables come from Railway dashboard secrets
+# Set these in your Railway project environment:
+# DATABASE_URL, REDIS_URL, QDRANT_URL, JWT_SECRET_KEY, OPENAI_API_KEY
+
+# ── Frontend Service ─────────────────────────────────────────
+[[services]]
+name = "frontend"
+source = "frontend"
+
+[services.build]
+dockerfilePath = "frontend/Dockerfile"
+dockerContext = "frontend"
+
+[services.deploy]
+startCommand = "node server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 20
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

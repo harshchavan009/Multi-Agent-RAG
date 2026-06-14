@@ -1,0 +1,18 @@
+log:
+  level: info
+
+storage:
+  storage_path: /qdrant/storage
+
+service:
+  max_request_size_mb: 256
+  max_workers: 0  # auto
+
+optimizers:
+  default_segment_number: 2
+  max_segment_size_kb: 100000
+
+hnsw_index:
+  m: 16
+  ef_construct: 100
+  full_scan_threshold: 10000

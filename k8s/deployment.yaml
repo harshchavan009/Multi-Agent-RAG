@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: enterprise-rag-config
+data:
+  DATABASE_HOST: "postgres-service"
+  DATABASE_NAME: "enterprise_rag"
+  REDIS_HOST: "redis-service"
+  VECTOR_DB_PROVIDER: "qdrant"
+  QDRANT_URL: "http://qdrant-service:6333"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: enterprise-rag-secrets
+type: Opaque
+data:
+  # Base64 encoded values for production safety
+  DATABASE_USER: "cG9zdGdyZXM=" # postgres
+  DATABASE_PASSWORD: "cG9zdGdyZXM=" # postgres
+  JWT_SECRET_KEY: "c3VwZXItc2VjcmV0LWtleS1jaGFuZ2UtaW4tcHJvZHVjdGlvbg==" # super-secret-key-change-in-production
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: harshchavan009/enterprise-rag-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql+psycopg2://postgres:postgres@postgres-service:5432/enterprise_rag"
+        - name: REDIS_URL
+          value: "redis://redis-service:6379/0"
+        - name: VECTOR_DB_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: enterprise-rag-config
+              key: VECTOR_DB_PROVIDER
+        - name: QDRANT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: enterprise-rag-config
+              key: QDRANT_URL
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: enterprise-rag-secrets
+              key: JWT_SECRET_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: backend
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: harshchavan009/enterprise-rag-frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://backend-service:8000/api/v1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  selector:
+    app: frontend
+  ports:
+  - protocol: TCP
+    port: 3000
+    targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: enterprise-rag-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 3000

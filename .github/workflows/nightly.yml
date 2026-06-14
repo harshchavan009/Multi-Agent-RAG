@@ -1,0 +1,71 @@
+name: Nightly — Dependency Updates & DB Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 2am UTC daily
+  workflow_dispatch:
+
+jobs:
+  # ─── Dependency Security Audit ──────────────────────────────
+  dependency-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python dependency audit
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt --output=markdown || true
+
+      - name: Node dependency audit
+        run: |
+          cd frontend
+          npm audit --audit-level=high || true
+
+  # ─── Automated dependency updates ───────────────────────────
+  update-deps:
+    name: Check for Updates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create PR with dependency updates
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Database Backup (prod) ──────────────────────────────────
+  db-backup:
+    name: PostgreSQL Backup → S3
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Backup PostgreSQL to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_FILE="backup_${TIMESTAMP}.sql.gz"
+
+          PGPASSWORD="${{ secrets.PROD_DB_PASSWORD }}" pg_dump \
+            -h ${{ secrets.PROD_DB_HOST }} \
+            -U ${{ secrets.PROD_DB_USER }} \
+            -d ${{ secrets.PROD_DB_NAME }} \
+            | gzip > $BACKUP_FILE
+
+          aws s3 cp $BACKUP_FILE s3://${{ vars.BACKUP_S3_BUCKET }}/postgres/$BACKUP_FILE
+          echo "Backup uploaded: $BACKUP_FILE"
+
+      - name: Cleanup old backups (retain 30 days)
+        run: |
+          aws s3 ls s3://${{ vars.BACKUP_S3_BUCKET }}/postgres/ \
+            | awk '{print $4}' \
+            | sort \
+            | head -n -30 \
+            | xargs -I {} aws s3 rm s3://${{ vars.BACKUP_S3_BUCKET }}/postgres/{}

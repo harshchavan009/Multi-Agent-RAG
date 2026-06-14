@@ -1,0 +1,72 @@
+{
+  "family": "enterprise-rag-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/enterprise-rag-backend:latest",
+      "cpu": 1024,
+      "memory": 2048,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "ENVIRONMENT", "value": "production"},
+        {"name": "LOG_LEVEL", "value": "info"},
+        {"name": "PORT", "value": "8000"}
+      ],
+      "secrets": [
+        {"name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/DATABASE_URL"},
+        {"name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/REDIS_URL"},
+        {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/QDRANT_URL"},
+        {"name": "JWT_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/JWT_SECRET_KEY"},
+        {"name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/OPENAI_API_KEY"},
+        {"name": "SMTP_HOST", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/SMTP_HOST"},
+        {"name": "SMTP_USER", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/SMTP_USER"},
+        {"name": "SMTP_PASSWORD", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:enterprise-rag/SMTP_PASSWORD"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/enterprise-rag-backend",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 40
+      },
+      "mountPoints": [
+        {
+          "sourceVolume": "uploads",
+          "containerPath": "/app/uploads",
+          "readOnly": false
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "uploads",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-XXXXXXXX",
+        "rootDirectory": "/uploads",
+        "transitEncryption": "ENABLED"
+      }
+    }
+  ]
+}

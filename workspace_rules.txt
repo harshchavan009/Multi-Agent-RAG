@@ -1,0 +1,5 @@
+Workspace Tenant Isolation Rules:
+1. All client workspace data must be completely isolated using dedicated tenant keys.
+2. Cross-workspace search queries are strictly forbidden.
+3. Every document uploaded must be tagged with the active workspace UUID.
+4. Security violations are automatically logged in the audit trail.
