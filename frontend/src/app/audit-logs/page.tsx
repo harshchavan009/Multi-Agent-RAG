@@ -14,8 +14,11 @@ interface AuditLogItem {
   created_at: string;
 }
 
+import { useAuthStore } from "@/app/store/authStore";
+
 export default function AuditLogsPage() {
-  const workspaceId = "8501bde6-222d-42d6-9d75-ae480447a0c0";
+  const { activeWorkspaceId } = useAuthStore();
+  const workspaceId = activeWorkspaceId || "8501bde6-222d-42d6-9d75-ae480447a0c0";
   
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -23,7 +26,7 @@ export default function AuditLogsPage() {
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [workspaceId]);
 
   const fetchLogs = () => {
     setLoading(true);

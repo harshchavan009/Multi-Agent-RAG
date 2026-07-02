@@ -41,3 +41,29 @@ def delete_agent(agent_id: uuid.UUID, email: str = Depends(get_current_user_emai
     db.delete(agent)
     db.commit()
     return {"message": "Agent deleted successfully"}
+
+from app.models.schemas import AgentBase
+
+@router.put("/{agent_id}", response_model=AgentResponse)
+def update_agent(
+    agent_id: uuid.UUID,
+    payload: AgentBase,
+    email: str = Depends(get_current_user_email),
+    db: Session = Depends(get_db)
+):
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent profile not found")
+        
+    agent.name = payload.name
+    agent.role = payload.role
+    agent.system_prompt = payload.system_prompt
+    agent.model_provider = payload.model_provider
+    agent.model_name = payload.model_name
+    agent.temperature = payload.temperature
+    agent.tools = payload.tools
+    agent.memory_config = payload.memory_config
+    
+    db.commit()
+    db.refresh(agent)
+    return agent

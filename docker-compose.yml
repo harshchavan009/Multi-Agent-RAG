@@ -25,6 +25,12 @@ x-common-env: &common-backend-env
   SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@enterprise-rag.ai}
   UPLOAD_DIR: /app/uploads
   MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-50}
+  STORAGE_PROVIDER: s3
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadmin
+  S3_BUCKET_NAME: enterprise-rag-storage
+  S3_REGION_NAME: us-east-1
 
 services:
   # ── Infrastructure ─────────────────────────────────────────
@@ -112,6 +118,8 @@ services:
       redis:
         condition: service_healthy
       qdrant:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -216,6 +224,41 @@ services:
     networks:
       - rag_network
 
+  neo4j:
+    image: neo4j:5-community
+    container_name: rag_neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password123
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - rag_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: rag_minio
+    restart: unless-stopped
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rag_network
+
 # ── Volumes ───────────────────────────────────────────────────
 volumes:
   postgres_data:
@@ -226,6 +269,10 @@ volumes:
     driver: local
   uploads_data:
     driver: local
+  neo4j_data:
+    driver: local
+  minio_data:
+    driver: local
 
 # ── Networks ──────────────────────────────────────────────────
 networks:
@@ -233,4 +280,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.20.0.0/16 n

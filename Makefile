@@ -81,7 +81,7 @@ logs-worker:
 	$(COMPOSE_DEV) logs -f celery_worker
 
 # ── Testing ───────────────────────────────────────────────────
-test: test-backend test-frontend
+test: test-backend test-frontend test-e2e
 
 test-backend:
 	@echo "Running backend tests..."
@@ -90,6 +90,10 @@ test-backend:
 test-frontend:
 	@echo "Running frontend type checks..."
 	cd $(FRONTEND_DIR) && npx tsc --noEmit
+
+test-e2e:
+	@echo "Running Playwright E2E tests..."
+	cd $(FRONTEND_DIR) && npm run test:e2e
 
 test-ci:
 	$(COMPOSE_DEV) run --rm backend \

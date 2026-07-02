@@ -10,14 +10,15 @@ from app.agents.graph import execute_agent_workflow
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
+from app.api.auth import reusable_oauth2
+
 # JWT Dependency validation
-def get_current_user_email(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
+def get_current_user_email(token: Optional[str] = Depends(reusable_oauth2), db: Session = Depends(get_db)) -> str:
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization credentials."
         )
-    token = authorization.split(" ")[1]
     claims = decode_token(token)
     if not claims or "sub" not in claims:
         raise HTTPException(

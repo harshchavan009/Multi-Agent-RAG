@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Enable standalone output for production Docker builds
-  output: 'standalone',
+  output: 'export',
+  images: {
+    unoptimized: true,
+  },
 
   // Experimental features
   experimental: {

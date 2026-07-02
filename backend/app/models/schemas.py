@@ -45,6 +45,9 @@ class Workspace(Base):
     llm_models = relationship("LLMModel", back_populates="workspace", cascade="all, delete-orphan")
     analytics_logs = relationship("AnalyticsLog", back_populates="workspace", cascade="all, delete-orphan")
     workspace_settings = relationship("WorkspaceSettings", back_populates="workspace", uselist=False, cascade="all, delete-orphan")
+    integrations = relationship("Integration", back_populates="workspace", cascade="all, delete-orphan")
+    prompts = relationship("Prompt", back_populates="workspace", cascade="all, delete-orphan")
+    experiments = relationship("Experiment", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class Team(Base):
@@ -115,6 +118,8 @@ class Document(Base):
     mime_type = Column(String(100), nullable=True)
     status = Column(String(50), nullable=False, default="pending") # 'pending', 'processing', 'completed', 'failed'
     metadata_fields = Column(JSON, default=dict) # renamed to avoid metadata naming clash
+    version = Column(Integer, default=1, nullable=False)
+    is_latest = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     knowledge_base = relationship("KnowledgeBase", back_populates="documents")
@@ -174,10 +179,23 @@ class Message(Base):
     content = Column(Text, nullable=False)
     citations = Column(JSON, default=list)
     metrics = Column(JSON, default=dict) # response latency, token count, cost
+    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="SET NULL"), nullable=True)
+    variant = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     chat = relationship("Chat", back_populates="messages")
     evaluations = relationship("Evaluation", back_populates="message", cascade="all, delete-orphan")
+
+class AgentMemory(Base):
+    __tablename__ = "agent_memories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    chat_id = Column(UUID(as_uuid=True), ForeignKey("chats.id", ondelete="CASCADE"), nullable=True)
+    memory_type = Column(String(50), nullable=False) # 'conversation_summary', 'workspace_fact', 'longterm_preference', 'semantic_fact'
+    content = Column(Text, nullable=False)
+    vector = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class AuditLog(Base):
@@ -235,6 +253,8 @@ class AnalyticsLog(Base):
     cost_usd = Column(Numeric(10, 5), default=0.0)
     latency_ms = Column(Integer, default=0)
     agent_visited = Column(String(100), default="RAG Agent")
+    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="SET NULL"), nullable=True)
+    variant = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     workspace = relationship("Workspace", back_populates="analytics_logs")
@@ -248,9 +268,88 @@ class WorkspaceSettings(Base):
     openai_api_key = Column(String(255), nullable=True)
     rag_context_limit = Column(Integer, default=5)
     theme = Column(String(50), default="dark")
+    # Active model selection
+    active_model_name = Column(String(100), default="gpt-4o", nullable=True)
+    active_model_api_key = Column(String(512), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     workspace = relationship("Workspace", back_populates="workspace_settings")
+
+
+class Integration(Base):
+    __tablename__ = "integrations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    credentials = Column(JSON, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    workspace = relationship("Workspace", back_populates="integrations")
+
+
+class Prompt(Base):
+    __tablename__ = "prompts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    content = Column(Text, nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    workspace = relationship("Workspace", back_populates="prompts")
+
+
+class Experiment(Base):
+    __tablename__ = "experiments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    status = Column(String(50), default="draft", nullable=False) # 'draft', 'active', 'ended'
+    model_a = Column(String(100), nullable=False)
+    model_b = Column(String(100), nullable=False)
+    prompt_a_id = Column(UUID(as_uuid=True), ForeignKey("prompts.id", ondelete="SET NULL"), nullable=True)
+    prompt_b_id = Column(UUID(as_uuid=True), ForeignKey("prompts.id", ondelete="SET NULL"), nullable=True)
+    traffic_split_a = Column(Numeric(3, 2), default=0.50, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    workspace = relationship("Workspace", back_populates="experiments")
+    prompt_a = relationship("Prompt", foreign_keys=[prompt_a_id])
+    prompt_b = relationship("Prompt", foreign_keys=[prompt_b_id])
+
+
+class ResearchTask(Base):
+    __tablename__ = "research_tasks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    query = Column(Text, nullable=False)
+    status = Column(String(50), nullable=False, default="pending")  # pending, running, completed, failed
+    result_summary = Column(Text, nullable=True)
+    pdf_filename = Column(String(512), nullable=True)
+    email_to = Column(String(255), nullable=True)
+    steps_log = Column(Text, nullable=True)  # JSON string of step outputs
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MeetingAnalysis(Base):
+    __tablename__ = "meeting_analyses"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    filename = Column(String(512), nullable=False)
+    transcript = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
+    action_items = Column(JSON, default=list)  # List of strings
+    decisions = Column(JSON, default=list)       # List of strings
+    status = Column(String(50), nullable=False, default="pending")  # pending, processing, completed, failed
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 # ==========================================
@@ -336,6 +435,8 @@ class DocumentResponse(BaseModel):
     mime_type: Optional[str] = None
     status: str
     metadata_fields: Dict[str, Any]
+    version: int
+    is_latest: bool
     created_at: datetime
     class Config:
         from_attributes = True
@@ -444,6 +545,8 @@ class WorkspaceSettingsBase(BaseModel):
     openai_api_key: Optional[str] = None
     rag_context_limit: int = 5
     theme: str = "dark"
+    active_model_name: Optional[str] = "gpt-4o"
+    active_model_api_key: Optional[str] = None
 
 class WorkspaceSettingsCreate(WorkspaceSettingsBase):
     workspace_id: uuid.UUID
@@ -468,6 +571,97 @@ class AuditLogResponse(AuditLogBase):
     id: uuid.UUID
     organization_id: uuid.UUID
     user_id: Optional[uuid.UUID]
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+class IntegrationBase(BaseModel):
+    name: str
+    credentials: Dict[str, Any] = {}
+    is_active: bool = True
+
+class IntegrationCreate(IntegrationBase):
+    workspace_id: uuid.UUID
+
+class IntegrationResponse(IntegrationBase):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+
+class PromptBase(BaseModel):
+    name: str
+    content: str
+    is_active: bool = False
+
+class PromptCreate(PromptBase):
+    workspace_id: uuid.UUID
+
+class PromptResponse(PromptBase):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    version: int
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+class ExperimentBase(BaseModel):
+    name: str
+    status: str = "draft"
+    model_a: str
+    model_b: str
+    prompt_a_id: Optional[uuid.UUID] = None
+    prompt_b_id: Optional[uuid.UUID] = None
+    traffic_split_a: float = 0.50
+
+class ExperimentCreate(ExperimentBase):
+    workspace_id: uuid.UUID
+
+class ExperimentResponse(ExperimentBase):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# --- Research Task Schemas ---
+
+class ResearchTaskCreate(BaseModel):
+    workspace_id: uuid.UUID
+    query: str
+    email_to: Optional[str] = None
+
+class ResearchTaskResponse(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    query: str
+    status: str
+    result_summary: Optional[str] = None
+    pdf_filename: Optional[str] = None
+    email_to: Optional[str] = None
+    steps_log: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# --- Meeting Analysis Schemas ---
+
+class MeetingAnalysisResponse(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    filename: str
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    action_items: List[str] = []
+    decisions: List[str] = []
+    status: str
     created_at: datetime
     class Config:
         from_attributes = True

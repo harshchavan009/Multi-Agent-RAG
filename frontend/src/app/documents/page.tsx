@@ -2,18 +2,19 @@
 
 import React, { useState, useEffect } from "react";
 import { apiFetch } from "../utils/api";
+import { useAuthStore } from "@/app/store/authStore";
+import { TableSkeleton } from "@/components/Skeletons";
+import EmptyState from "@/components/EmptyState";
 import {
   Folder,
   File,
   Upload,
-  Settings,
   RefreshCw,
   CheckCircle,
-  Clock,
   Plus,
   Search,
-  Tag,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from "lucide-react";
 
 interface KnowledgeBaseItem {
@@ -28,22 +29,36 @@ interface DocumentItem {
   file_size?: number;
   mime_type?: string;
   status: string;
+  version: number;
+  is_latest: boolean;
 }
 
 export default function DocumentsPage() {
-  const workspaceId = "8501bde6-222d-42d6-9d75-ae480447a0c0";
+  const { activeWorkspaceId } = useAuthStore();
+  const workspaceId = activeWorkspaceId || "8501bde6-222d-42d6-9d75-ae480447a0c0";
 
   const [kbList, setKbList] = useState<KnowledgeBaseItem[]>([]);
   const [selectedKb, setSelectedKb] = useState<KnowledgeBaseItem | null>(null);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [search, setSearch] = useState("");
+  const [showAllVersions, setShowAllVersions] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Load knowledge bases on mount
+  // Load knowledge bases when workspaceId changes
   useEffect(() => {
+    setKbList([]);
+    setSelectedKb(null);
+    setDocuments([]);
     fetchKBs();
-  }, []);
+  }, [workspaceId]);
+
+  // Fetch documents when selected KB or version mode changes
+  useEffect(() => {
+    if (selectedKb) {
+      fetchDocuments(selectedKb.id, showAllVersions);
+    }
+  }, [selectedKb, showAllVersions]);
 
   const fetchKBs = () => {
     apiFetch(`/documents/kb?workspace_id=${workspaceId}`)
@@ -51,17 +66,24 @@ export default function DocumentsPage() {
       .then((data) => {
         if (Array.isArray(data)) {
           setKbList(data);
-          if (data.length > 0) {
+          if (data.length > 0 && !selectedKb) {
             setSelectedKb(data[0]);
-            fetchDocuments(data[0].id);
+          } else if (data.length === 0) {
+            setLoading(false);
           }
+        } else {
+          setLoading(false);
         }
+      })
+      .catch((err) => {
+        console.log("Failed to load KBs", err);
+        setLoading(false);
       });
   };
 
-  const fetchDocuments = (kbId: string) => {
+  const fetchDocuments = (kbId: string, showAll: boolean = showAllVersions) => {
     setLoading(true);
-    apiFetch(`/documents/?knowledge_base_id=${kbId}`)
+    apiFetch(`/documents/?knowledge_base_id=${kbId}&show_all_versions=${showAll}`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -116,7 +138,23 @@ export default function DocumentsPage() {
 
   const handleSelectKb = (kb: KnowledgeBaseItem) => {
     setSelectedKb(kb);
-    fetchDocuments(kb.id);
+  };
+
+  const handleDeleteDoc = (docId: string) => {
+    if (!confirm("Are you sure you want to delete this document from storage and index collections?")) return;
+    apiFetch(`/documents/${docId}`, {
+      method: "DELETE"
+    })
+      .then((res) => {
+        if (res.ok) {
+          if (selectedKb) {
+            fetchDocuments(selectedKb.id);
+          }
+        } else {
+          alert("Failed to delete document.");
+        }
+      })
+      .catch((err) => console.error(err));
   };
 
   const filteredDocs = documents.filter((doc) =>
@@ -168,19 +206,31 @@ export default function DocumentsPage() {
 
         <div className="lg:col-span-3 glass-card rounded-2xl p-6 flex flex-col space-y-6 h-full overflow-y-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search file name..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none text-slate-700 dark:text-slate-200"
-              />
+            <div className="flex items-center gap-4 w-full md:w-auto">
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search file name..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none text-slate-700 dark:text-slate-200"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 cursor-pointer shrink-0 select-none">
+                <input
+                  type="checkbox"
+                  checked={showAllVersions}
+                  onChange={(e) => setShowAllVersions(e.target.checked)}
+                  className="rounded border-slate-300 dark:border-slate-800 text-indigo-600 focus:ring-indigo-500 accent-indigo-500 h-4 w-4"
+                />
+                <span>Show version history</span>
+              </label>
             </div>
 
             <form className="w-full md:w-auto flex justify-end">
-              <label className="flex items-center gap-2 border border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-350 text-xs font-semibold px-4.5 py-2 rounded-xl cursor-pointer transition">
+              <label className="flex items-center gap-2 border border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50 dark:bg-slate-955 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-350 text-xs font-semibold px-4.5 py-2 rounded-xl cursor-pointer transition">
                 <Upload className="h-4 w-4 text-indigo-500" />
                 <span>Upload New File</span>
                 <input type="file" className="hidden" onChange={handleFileUpload} />
@@ -189,10 +239,7 @@ export default function DocumentsPage() {
           </div>
 
           {loading && (
-            <div className="flex gap-2 items-center justify-center p-12 text-slate-400">
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              <span className="text-xs font-bold">Querying indexed database records...</span>
-            </div>
+            <TableSkeleton />
           )}
 
           <div className="space-y-3">
@@ -204,7 +251,17 @@ export default function DocumentsPage() {
                       <File className="h-5 w-5 text-indigo-500" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">{doc.name}</h4>
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                        <span>{doc.name}</span>
+                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 px-1.5 py-0.5 rounded font-bold text-slate-500">
+                          v{doc.version || 1}
+                        </span>
+                        {!doc.is_latest && (
+                          <span className="text-[9px] bg-slate-200/50 dark:bg-slate-800/30 text-slate-400 dark:text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                            archived
+                          </span>
+                        )}
+                      </h4>
                       <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400 dark:text-slate-500 font-bold">
                         <span>Size: {doc.file_size ? `${round(doc.file_size / 1024, 1)} KB` : "unknown"}</span>
                         <span>•</span>
@@ -215,7 +272,7 @@ export default function DocumentsPage() {
 
                   <div className="flex items-center gap-4">
                     {doc.status === "completed" ? (
-                      <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5">
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 animate-in fade-in">
                         <CheckCircle className="h-3 w-3" /> Vector Indexed
                       </span>
                     ) : doc.status === "processing" ? (
@@ -227,15 +284,29 @@ export default function DocumentsPage() {
                         <AlertTriangle className="h-3.5 w-3.5" /> Failed
                       </span>
                     )}
+
+                    <button
+                      onClick={() => handleDeleteDoc(doc.id)}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 dark:hover:text-rose-450 transition cursor-pointer"
+                      title="Delete Document"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               ))
             ) : (
               !loading && (
-                <div className="p-12 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
-                  <AlertTriangle className="h-8 w-8 text-amber-500" />
-                  <h5 className="text-xs font-extrabold text-slate-700 dark:text-slate-300">No documents indexed</h5>
-                </div>
+                <EmptyState
+                  type="document"
+                  title="No documents indexed"
+                  description="Upload files (PDF, DOCX, TXT) to index vectors into Qdrant collection."
+                  actionLabel="Upload New File"
+                  onActionClick={() => {
+                    const inputEl = document.querySelector('input[type="file"]') as HTMLInputElement;
+                    inputEl?.click();
+                  }}
+                />
               )
             )}
           </div>

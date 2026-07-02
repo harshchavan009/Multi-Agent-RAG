@@ -15,23 +15,28 @@ const config: Config = {
         border: "var(--border)",
         card: "var(--card)",
         primary: {
-          DEFAULT: "#6366f1", // Indigo
-          hover: "#4f46e5",
+          DEFAULT: "#3B82F6", // Blue Accent
+          hover: "#2563EB",
         },
         secondary: {
-          DEFAULT: "#10b981", // Emerald
+          DEFAULT: "#10B981", // Success Green
           hover: "#059669",
+        },
+        warning: {
+          DEFAULT: "#F59E0B", // Warning Amber
+          hover: "#D97706",
         },
         accent: {
           cyan: "#06b6d4",
           purple: "#a855f7",
           pink: "#ec4899",
+          blue: "#3B82F6",
         },
         dark: {
           50: "#f8fafc",
           100: "#f1f5f9",
-          900: "#0b0f19",
-          950: "#030712",
+          900: "#111827",      // Dark cards
+          950: "#0A0A0A",      // Dark background
         }
       },
       boxShadow: {

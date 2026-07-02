@@ -25,9 +25,99 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
+  # ─── Verification ──────────────────────────────────────────
+  verify:
+    name: Lint & Test Verification
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_enterprise_rag
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      qdrant:
+        image: qdrant/qdrant:v1.9.3
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "curl -f http://localhost:6333/healthz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx anyio ruff
+
+      - name: Run backend linting (ruff)
+        run: |
+          cd backend
+          ruff check app/ tests/ --output-format=github
+
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/test_enterprise_rag
+          REDIS_URL: redis://localhost:6379/0
+          QDRANT_URL: http://localhost:6333
+          JWT_SECRET_KEY: ci-test-secret-key-not-for-production
+          ENVIRONMENT: testing
+        run: |
+          cd backend
+          PYTHONPATH=. pytest tests/ -v --tb=short
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run TypeScript type checks
+        run: |
+          cd frontend
+          npx tsc --noEmit
+
   # ─── Build & Push Docker Images ─────────────────────────────
   build-images:
     name: Build & Push Images
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -10,8 +10,11 @@ interface SettingsData {
   theme: string;
 }
 
+import { useAuthStore } from "@/app/store/authStore";
+
 export default function SettingsPage() {
-  const workspaceId = "8501bde6-222d-42d6-9d75-ae480447a0c0";
+  const { activeWorkspaceId } = useAuthStore();
+  const workspaceId = activeWorkspaceId || "8501bde6-222d-42d6-9d75-ae480447a0c0";
 
   const [settings, setSettings] = useState<SettingsData>({
     openai_api_key: "",
@@ -26,7 +29,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [workspaceId]);
 
   const fetchSettings = () => {
     setLoading(true);

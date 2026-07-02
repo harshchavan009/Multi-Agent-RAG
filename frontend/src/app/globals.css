@@ -4,14 +4,16 @@
 
 /* Theme Variable Declarations */
 :root {
-  --background: #030712;
+  /* Dark Theme (Default) */
+  --background: #0A0A0A;
   --foreground: #f8fafc;
-  --border: #1f2937;
-  --card: rgba(17, 24, 39, 0.7);
-  --card-hover: rgba(17, 24, 39, 0.85);
-  --accent-glow: rgba(99, 102, 241, 0.15);
-  --primary-color: #6366f1;
-  --secondary-color: #10b981;
+  --border: #1F2937;
+  --card: #111827;
+  --card-hover: #1f2937;
+  --accent-glow: rgba(59, 130, 246, 0.12);
+  --primary-color: #3B82F6;     /* Accent */
+  --secondary-color: #10B981;   /* Success */
+  --warning-color: #F59E0B;     /* Warning */
   --sidebar-width: 16rem;
   --sidebar-collapsed-width: 4.5rem;
 }
@@ -21,11 +23,12 @@
   --background: #f8fafc;
   --foreground: #0f172a;
   --border: #e2e8f0;
-  --card: rgba(255, 255, 255, 0.75);
-  --card-hover: rgba(255, 255, 255, 0.9);
-  --accent-glow: rgba(99, 102, 241, 0.08);
-  --primary-color: #4f46e5;
+  --card: #ffffff;
+  --card-hover: #f1f5f9;
+  --accent-glow: rgba(59, 130, 246, 0.08);
+  --primary-color: #2563eb;
   --secondary-color: #059669;
+  --warning-color: #d97706;
 }
 
 body {
@@ -54,19 +57,19 @@ body {
 .glass-card:hover {
   background: var(--card-hover);
   border-color: var(--primary-color);
-  box-shadow: 0 0 25px var(--accent-glow);
-  transform: translateY(-2px);
+  box-shadow: 0 4px 20px var(--accent-glow);
+  transform: translateY(-1px);
 }
 
 /* Premium gradient accents */
 .gradient-text {
-  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #3B82F6 0%, #10B981 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .light .gradient-text {
-  background: linear-gradient(135deg, #4f46e5 0%, #0891b2 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #059669 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -102,9 +105,7 @@ body {
   background: var(--primary-color);
 }
 
-/* Dashboard Mesh Grid Backdrop */
+/* Solid background for clean enterprise feel, avoiding busy gradients */
 .mesh-bg {
-  background-image: 
-    radial-gradient(at 0% 0%, var(--accent-glow) 0px, transparent 55%),
-    radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.08) 0px, transparent 50%);
+  background-color: var(--background);
 }
